@@ -3,7 +3,7 @@
 #include <string>
 #include <cstdlib>
 using namespace std;
-
+#include <ctime>
 bool syn = false;
 
 bool liveTraining = false;
@@ -26,13 +26,13 @@ string trainLocSynObj = imageLoc + "/trainImagesObject";
 string testConfFile = "/home/npillai1/AL/ConfFile/testDataSet.conf";
 string testLoc = imageLoc + "/testImages";
 //string dsLoc = "/home/npillai1/AL/images/DS1";
-string dsLoc = "/home/npillai1/AL/images/ImgDz";
+string dsLoc = "/home/npillai1/AL/images/NmPx";
 //string dsLoc = "/home/nish/DPD/thirdparty/kdes_2.0/bck-images/MTurkSet/rgbdcollection";
 string libLinearLoc = "/home/npillai1/AL/kdes_2.0/liblinear-1.5-dense/";
 
 //string testLocation = imageLoc + "/trainImages1kIII";
 //string testLocation = imageLoc + "/UserStudy";
-string testLocation = imageLoc + "/CumulativePredictions-II";
+string testLocation = imageLoc + "/RSS-Batchmode-Traditional-I";
 string trainLocation = testLocation;
 // Function to delete prevous trained models and data
 
@@ -150,6 +150,9 @@ void interactive()
 
 int main ( int argc, char *argv[] )
 {
+   time_t now = time(0);
+   char* dt = ctime(&now);
+   cout << "The local date and time is: " << dt << endl;
    if ( argc == 1) {
       interactive();
    } else {
@@ -169,4 +172,7 @@ int main ( int argc, char *argv[] )
 	//justCheck();
      }
    }
+   time_t now1 = time(0);
+   char* dt1 = ctime(&now1);
+   cout << "The local date and time is: " << dt1 << endl;
 }

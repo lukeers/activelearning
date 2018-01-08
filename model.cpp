@@ -3,6 +3,7 @@
 #include "lang.h"
 //#include "logit.h"
 #include "logisticReg.h"
+#include "logisticRegression.h"
 #include <string>
 #include <iostream>
 #include <vector>
@@ -955,10 +956,12 @@ void addTNegTFIDF(string trainLoc, string srt,vector<string> labelInd) {
 	myfile << endl << "Negative Instances :: ";
 	//   while((cNo <= (countNeg + labelInd.size())) and (emptyCount < labelInd.size())) {
 
-	while((cNo <= countNeg) and (emptyCount < labelInd.size())) {
+//	while((cNo <= countNeg) and (emptyCount < labelInd.size())) {
+	for (int i = 0;i < labelInd.size(); i++) {
 		roundC++;
 		unsigned clock = roundC % labelInd.size();
-		string lbla = labelInd.at(clock);
+//		string lbla = labelInd.at(clock);
+		string lbla = labelInd.at(i);
 		//         cout <<"neg up " <<  lbla << endl;
 		if(exists(lbla)) {
 			myfile  << lbla << ", ";
@@ -974,6 +977,7 @@ void addTNegTFIDF(string trainLoc, string srt,vector<string> labelInd) {
 	}
 	myfile << endl; 
 	myfile.close(); 
+	cout << "Negative count " << labelInd.size() << endl;
 }
 
 void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
@@ -2495,7 +2499,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 				ofs.open (testSet, ofstream::out);
 				ofs << imNm;
 				ofs.close();
-/*
+
 				string cmd1 = libLinearLoc + "/train -s 0 -c 10 " + trainSet + " " + modelFile;
 				ret = system(cmd1.c_str());
 				cmd1 = libLinearLoc + "/predict -b 1 " + testSet + " " + modelFile + " " + outputFile;
@@ -2522,7 +2526,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 				cmd1 = "echo " + label + "," + probabilities +">>" + csvFile;
 				ret = system(cmd1.c_str());
 				
-*/				//testWithLogisticRegression(label,csvFile,trainSet,testSet);
+				//testWithLogisticRegression(label,csvFile,trainSet,testSet);
 			}
 
 			void testColorShapeObject(string trainLocation,string label,string libLinearLoc,string rgbCSVFile,string shapeCSVFile,string objectCSVFile)  {
@@ -2533,7 +2537,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 				vector<string> category = {"rgb","shape","object"};
                                 vector<string> csvFiles = {rgbCSVFile,shapeCSVFile,objectCSVFile};
 				cout << category.size() <<endl;
-				testLogRegression(trainLocation,label,csvFiles,category);
+				//testLogRegression(trainLocation,label,csvFiles,category);
 				
 			}
 
@@ -2580,7 +2584,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 				cmd = ">"+ objectCSVFile;
 				ret = system(cmd.c_str());
 				cout << "-------Object CSV FILE--------------- " << objectCSVFile << endl;
-				string lbls = ",,";
+				string lbls = ",";
 				for (int i = 0; i < testLabels.size() ; i ++ ) {
 					lbls += testLabels.at(i) + ",";
 				}
@@ -2638,7 +2642,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 					string lbl = dat.str();
 					cout << lbl << " is starting execution !!!!!" << endl;
 //					if (lbl == "arcshape") {
-					if (lbl == "apple" or lbl == "arch" or lbl == "archshaped" or lbl == "arcshape" or lbl == "banana" or lbl == "black" or lbl == "block" or lbl == "blue" ){
+//					if (lbl == "apple" or lbl == "arch" or lbl == "archshaped" or lbl == "arcshape" or lbl == "banana" or lbl == "black" or lbl == "block" or lbl == "blue" ){
 					cout << endl << " >>>>>>  " << lbl << "--->";
 					vector<string> poss = posLabelIndMat[lbl];
 					vector<string> negss = labelIndMat[lbl];
@@ -2664,7 +2668,7 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 						//  }  
 					}
 					cout << endl << lbl << " - Completed execution !!!!!" << endl;
-				}
+//				}
 
 				}
 /*
@@ -2798,6 +2802,48 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 				return testSet;
 			}
 
+                        vector<string> prepareTestDataJack(vector<string> trainCls) {
+                                map<string, set<string>> fullDataSet;
+                                for(unsigned i = 0;i < trainCls.size(); i++) {
+                                        if(trainCls.at(i) != "") {
+                                                string trainfileData = trainCls.at(i);
+                                                vector <string> feature = split_string(trainfileData,",");
+						vector <string> feature1 = split_string(feature.front(),"/");
+						string cat = feature1.front();
+						string inst = feature.front();
+						if (fullDataSet.find(cat) == fullDataSet.end() ) {
+							set<string> insts;
+							insts.insert(inst);
+                                                        fullDataSet[cat] = insts;
+						} else {
+							set<string> insts = fullDataSet[cat];
+							insts.insert(inst);
+							fullDataSet[cat] = insts;
+						}
+                                        }
+                                }
+				vector<string> testSet;
+				for (map<string,set<string>>::iterator it=fullDataSet.begin(); it!=fullDataSet.end(); ++it) {
+                                   set<string> itA = it->second;
+				   string itB = it->first;
+				   vector<string> fDS(itA.size());
+				   copy(itA.begin(), itA.end(), fDS.begin());
+				   int testInstLength  =  1;
+				   int count = 0;
+				   while (count < testInstLength) {
+                                        srand (time(NULL));
+                                        int  iSecret = rand() % itA.size();
+                                        string data = fDS.at(iSecret);
+					testSet.push_back(data);
+					count++;
+				   }
+				}
+                                for(unsigned i = 0;i < testSet.size(); i++) {
+                                        //       cout << testSet.at(i) << " , ";
+				}
+                                return testSet;
+                        }
+
 			vector<string> prepareTestDataAL(vector<string> trainCls, int interval,int intervalLimit) {
 
 
@@ -2862,7 +2908,8 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 								string lbl = labels.at(j);
 								lbl.erase (std::remove (lbl.begin(), lbl.end(), ' '), lbl.end());
 								if (find(testSet.begin(), testSet.end(), lbl) == testSet.end()) {
-									filteredLabels.push_back(dsLoc + "/" + lbl);
+									//filteredLabels.push_back(dsLoc + "/" + lbl);
+									filteredLabels.push_back(lbl);
 								}
 							}
 							vector<string>::iterator it;
@@ -2874,9 +2921,9 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 							negMapInstances[ds] = filteredLabels;
 							for(unsigned j = 0;j < filteredLabels.size(); j++) {
 								string lbl = filteredLabels.at(j);
-								//   cout << lbl << ",";
+							//        cout << lbl << ",";
 							}
-							//    cout << endl;
+					//		    cout << endl;
 						}
 					}
 					for(unsigned j = 0;j < testSet.size(); j++) {
@@ -3921,14 +3968,14 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 
 
 				void mlBatchModel(string dsLoc,string trainLocation,string trainConfFile,string testConfFile,string libLinearLoc,bool syn) {
-					int negType = 4;
+					int negType = 3;
 					cout << "Batch mode started" << endl;
 					testAnnotation = {};
 					prepAnnotation(testAnnot,fullAnnot);
 					vector<string> trainCls = fileToVector(trainConfFile);
 					vector<string> trainClsCopy = trainCls;
 					//cout << trainCls.size() << endl;
-					vector<string> testSet = prepareTestData(trainCls);
+					vector<string> testSet = prepareTestDataJack(trainCls);
 					trainCls = prepareTrainData(trainCls,testSet); 
 					trainClsCopy = trainCls;
 					// cout << trainCls.size() << endl;
@@ -3947,6 +3994,8 @@ void addTNeg(string trainLoc, string srt,vector<string> labelInd) {
 						negMapInstances = prepareNegSetsFromInstances(dsLoc,tnC,testSet);
 						negType = 2;
 					}
+					regularizedLogisticRegression(dsLoc,trainCls,testSet,negMapInstances,testFullAnnotation,trainLocation);
+					exit(0);
 					//int interval = 10;
 					int interval  = 2000;
 					bool repFlag = false;
