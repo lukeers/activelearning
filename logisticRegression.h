@@ -74,24 +74,14 @@ vector<vector<double>>  getInstances(string dsLoc,string inst,int cat) {
    return getImageFeatures(fName);
 }
 
-double sigmoid(vector<double> data,vector<double> coef) {
+double sigmoid(const vector<double>& data,const vector<double>& coef) {
   double yHat = coef[0];
   int x  = 4;
   for (int ij=1;ij < coef.size(); ij++) {
-//    double cc = floor( ( coef[ij]  * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-//    yHat = yHat + cc * data[ij - 1];
-//    yHat = floor( ( yHat * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-//    cout << coef[ij] << " " << data[ij - 1] << " " << yHat << ",,,,,";
 	yHat = yHat + coef[ij] * data[ij - 1];
   }
-  double xx = abs(-1 * yHat);
-  xx = -1 * yHat;
+  double xx = -1 * yHat;
   double sig = 1.0/(1.0 + exp(xx));
- // sig = floor( ( sig * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-//  cout << endl << "sigmoid " << sig << endl;
-  double yHat1 = floor( ( yHat * pow( 10,x ) ) + 0.5 ) / pow( 10, x); 
-  double sig1 = 1.0/(1.0 + exp(-1 * yHat1)); 
-//  cout << "yHat, " << yHat << " , sig " << sig << ", modified -- yHat , " << yHat1 << " , sig " << sig1 <<endl;
   return sig;
 }
 
@@ -117,6 +107,16 @@ double costFunction(vector<double> inst,vector<double> coef, double y) {
 //   cout << coef[1] << endl;
    return coef;
 */
+}
+double costFunctionBatch(const vector<double>& inst,const vector<double>& coef, const double& y) {
+   double sig = sigmoid(inst,coef);
+   double error = y - sig;
+   return error;
+//   if(sig > 0.0 and sig < 1.0) {
+       return error * sig * (1.0 - sig);
+//   } else {
+//       return error;
+//   }
 }
 
 double regularize(vector<double> inst,vector<double> coef, double reg) {
@@ -152,7 +152,7 @@ vector<double> updateRegularizer(vector<double> b,double g,double gG,int n) {
    return bb;
 }
 
-vector<double> updateCostFunction(vector<double> inst, vector<double> b,double g,double gG,int n) {
+vector<double> updateCostFunction(const vector<double>& inst,const vector<double>& b,const double& g,const double& gG,const int& n) {
    double eta = 0.1;
    int x = 2;
    double s = eta * (g + (gG / n));
@@ -166,15 +166,16 @@ vector<double> updateCostFunction(vector<double> inst, vector<double> b,double g
    return bb;
 }
 
-vector<double> updateCostBatch(vector<double> b,vector<double> g, double gG,int n) {
+vector<double> updateCostBatch(const vector<double>& b,const vector<double>& g,const double& gG,const int& n) {
    double eta = 0.1;
    vector<double> bb;
+   double ss = b.at(0) + g.at(0) + eta * (gG / n);
+//   cout <<  b.at(0) << "-" << g.at(0) << "-" << ss << endl;
    
-   double ss = b.at(0) + eta * (g.at(0) + (gG / n));
    bb.push_back(ss);
 //   cout <<  b.at(0) << "--" << ss << endl;
    for(int i=1;i < b.size();i++) {
-      ss = b.at(i) + eta * (g.at(i-1) + (gG / n));
+      ss = b.at(i) + g.at(i) + eta * (gG / n);
       bb.push_back(ss);
 //cout <<  b.at(i) << "--" << ss << endl;
 
@@ -183,20 +184,34 @@ vector<double> updateCostBatch(vector<double> b,vector<double> g, double gG,int 
    return bb; 
 }
 
-vector<double> updateG(vector<double> inst, vector<double> b,double g) {
-//   cout << "updating g " << g << endl;
-   double s = g;
+vector<double> updateG(const vector<double>& inst,const vector<double>& b,const double& g) {
+   double eta = 0.1;
+   double s = g * eta;
    vector<double> bb;
    double ss = b.at(0) + s;
-//   cout << b.at(0) << "===" << ss << endl;
    bb.push_back(ss);
    for(int i=1;i < b.size();i++) {
       ss = b.at(i) + s * inst.at(i-1);
       bb.push_back(ss);
-//       cout << b.at(i) << "===" << ss << endl;
    }
-//   cout << endl << "--G- DONE---" <<endl << endl;
    return bb;
+}
+
+double logLikelyHood(const vector<vector<double>>& instPos,const vector<vector<double>>& instNeg,const vector<double>& coef) {
+   double ll = 0.0;
+   for (int k = 0; k < instPos.size();k++) {
+        double sig = sigmoid(instPos.at(k),coef);
+        if(sig > 0.0) {
+          ll += (1.0 * log(sig)) ;
+	}
+   }
+   for (int k = 0; k < instNeg.size();k++) {
+        double sig = sigmoid(instNeg.at(k),coef);
+	if(sig < 1.0) {
+           ll += (1.0 - 0.0) * log(1.0 - sig) ;
+	}
+   }
+   return -1 * ll;
 }
 
 double negLossFunctionUpdate1(vector<double> coef,vector<string> dss,int type) {
@@ -719,7 +734,7 @@ void regularizedLogisticRegression2(string dsLoc,vector<string> trainCls,vector<
 }
 
 void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<string> testSet,map<string,vector<string>> negMapInstances,map<string,string> testFullAnnotation,string trainLocation) {
-     int batch = 10000;
+     int batch = 1000;
      map<string, vector<string>> posPaths;
      map<string, vector<string>> negPaths;
      map<string,vector<vector<double>>> rgbFeatures;
@@ -826,13 +841,14 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 //	      cout << attribute << "---" << negRgbFeatures.size() << "-" << negShapeFeatures.size() << "-" << negObjFeatures.size() << endl; 
 
 
+
 //	    ////// Stochastic Updation /////////  
+              cout << "----------Online Mode ----------" << endl;
 	      vector<double> rgbCoef(posRgbFeatures[0].size() + 1, 0);
               vector<double> shapeCoef(posShapeFeatures[0].size() + 1, 0);
               vector<double> objCoef(posObjFeatures[0].size() + 1, 0);
 	      for(int epochs = 0;epochs < batch; epochs++) {
 
-		 cout << attribute << "--- Epoch : " << epochs + 1 << endl;
 	         for (int k = 0; k < posRgbFeatures.size();k++) {
 		   // Regularizer
 		   // Loss function  
@@ -861,19 +877,32 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
                       shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
 
+                 }
+                 int iter = 500;
+                 if ((epochs + 1) % iter == 0) {
+                         cout << attribute << "--- Epoch : " << epochs + 1 << endl;
+                        double ll = logLikelyHood(posRgbFeatures,negRgbFeatures,rgbCoef);
+                        cout << "Color :: Negative Log Likelihood :: " << ll << endl;
+                        ll = logLikelyHood(posShapeFeatures,negShapeFeatures,shapeCoef);
+                        cout << "Shape :: Negative Log Likelihood :: " << ll << endl;
+                        ll = logLikelyHood(posObjFeatures,negObjFeatures,objCoef);
+                        cout << "Object :: Negative Log Likelihood :: " << ll << endl;
                  }                                                            
 	      }
 	      bColor[attribute] = rgbCoef;
 	      bShape[attribute] = shapeCoef;
 	      bObject[attribute] = objCoef;
 
-/*
+
+
 
 //////////////////// Batch Updation /////////
+/*
+              cout << "--------Batch Mode  starts ------------" << endl;
+              vector<double> rgbCoefB(posRgbFeatures[0].size() + 1, 0);
+              vector<double> shapeCoefB(posShapeFeatures[0].size() + 1, 0);
+              vector<double> objCoefB(posObjFeatures[0].size() + 1, 0);
 
-              vector<double> rgbCoef(posRgbFeatures[0].size() + 1, 0);
-              vector<double> shapeCoef(posShapeFeatures[0].size() + 1, 0);
-              vector<double> objCoef(posObjFeatures[0].size() + 1, 0);
               for(int epochs = 0;epochs < batch; epochs++) {
 
                  vector<double> rgbG(posRgbFeatures[0].size() + 1, 0);
@@ -882,25 +911,16 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 
 //                 cout << attribute << "--- Epoch : " << epochs + 1 << endl;
                  for (int k = 0; k < posRgbFeatures.size();k++) {
-/* 
-                      double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
-                      double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
-                      double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
-*/
-                      double cLoss = costFunction(posRgbFeatures.at(k),rgbG,1.0);
-                      double sLoss =  costFunction(posShapeFeatures.at(k),shapeG,1.0);
-                      double oLoss =  costFunction(posObjFeatures.at(k),objG,1.0);
-		      
-                      rgbG = updateG(posRgbFeatures.at(k),rgbG,cLoss);
-                      shapeG = updateG(posShapeFeatures.at(k),shapeG,sLoss);
-                      objG = updateG(posObjFeatures.at(k),objG,oLoss);
-			
-/*
+ 
+                      double cLoss = costFunctionBatch(posRgbFeatures.at(k),rgbCoefB,1.0);
+                      double sLoss =  costFunctionBatch(posShapeFeatures.at(k),shapeCoefB,1.0);
+                      double oLoss =  costFunctionBatch(posObjFeatures.at(k),objCoefB,1.0);
+
                       double gG1 = 0.0;
-                      rgbCoef = updateCostFunction(posRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
-                      shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
-                      objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,3);
-*/
+                      rgbG = updateCostFunction(posRgbFeatures.at(k),rgbG,cLoss,gG1,1);
+                      shapeG = updateCostFunction(posShapeFeatures.at(k),shapeG,sLoss,gG1,2);
+                      objG = updateCostFunction(posObjFeatures.at(k),objG,oLoss,gG1,3);			
+
                  }
 
 //		cout << "Negative starts here " << endl;
@@ -908,39 +928,43 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
                    // Regularizer
                    //                    //                    // Loss function  
                    //
-/*
-                      double cLoss = costFunction(negRgbFeatures.at(k),rgbCoef,0.0);
-                      double sLoss =  costFunction(negShapeFeatures.at(k),shapeCoef,0.0);
-                      double oLoss =  costFunction(negObjFeatures.at(k),objCoef,0.0);
-*/
 
-                      double cLoss = costFunction(negRgbFeatures.at(k),rgbG,0.0);
-                      double sLoss =  costFunction(negShapeFeatures.at(k),shapeG,0.0);
-                      double oLoss =  costFunction(negObjFeatures.at(k),objG,0.0);
+                      double cLoss = costFunctionBatch(negRgbFeatures.at(k),rgbCoefB,0.0);
+                      double sLoss =  costFunctionBatch(negShapeFeatures.at(k),shapeCoefB,0.0);
+                      double oLoss =  costFunctionBatch(negObjFeatures.at(k),objCoefB,0.0);
 
-                      rgbG = updateG(posRgbFeatures.at(k),rgbG,cLoss);
-                      shapeG = updateG(posShapeFeatures.at(k),shapeG,sLoss);
-                      objG = updateG(posObjFeatures.at(k),objG,oLoss);
-
-/*
-                      //double gG1 = cReg+ sReg + oReg;
                       double gG1 = 0.0;
-                      rgbCoef = updateCostFunction(negRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
-                      shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
-                      objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
-*/
+                      rgbG = updateCostFunction(negRgbFeatures.at(k),rgbG,cLoss,gG1,1);
+                      shapeG = updateCostFunction(negShapeFeatures.at(k),shapeG,sLoss,gG1,2);
+                      objG = updateCostFunction(negObjFeatures.at(k),objG,oLoss,gG1,3);
                  }
 
 		 double gG1 = 0.0;
-		 rgbCoef = updateCostBatch(rgbCoef,rgbG,gG1,posRgbFeatures.size());
-		 shapeCoef = updateCostBatch(shapeCoef,shapeG,gG1,posRgbFeatures.size());
-		 objCoef = updateCostBatch(objCoef,objG,gG1,posRgbFeatures.size());
-		 
-              }
-              bColor[attribute] = rgbCoef;
-              bShape[attribute] = shapeCoef;
-              bObject[attribute] = objCoef;                                                             
 
+		 rgbCoefB = updateCostBatch(rgbCoefB,rgbG,gG1,posRgbFeatures.size());
+		 shapeCoefB = updateCostBatch(shapeCoefB,shapeG,gG1,posRgbFeatures.size());
+		 objCoefB = updateCostBatch(objCoefB,objG,gG1,posRgbFeatures.size());
+		 int iter = 500;
+		 if ((epochs == 0) or ((epochs + 1) % iter == 0)) {
+			 cout << attribute << "--- Epoch : " << epochs + 1 << endl;
+			double ll = logLikelyHood(posRgbFeatures,negRgbFeatures,rgbCoefB);
+			cout << "Color :: Negative Log Likelihood :: " << ll << endl;
+			ll = logLikelyHood(posShapeFeatures,negShapeFeatures,shapeCoefB);
+                        cout << "Shape :: Negative Log Likelihood :: " << ll << endl;
+			ll = logLikelyHood(posObjFeatures,negObjFeatures,objCoefB);
+                        cout << "Object :: Negative Log Likelihood :: " << ll << endl;
+		 }
+		 rgbG.clear();
+                 shapeG.clear();
+                 objG.clear();
+
+
+              }
+	      ostringstream atr;
+	      atr << attribute << "-batch";
+              bColor[atr.str()] = rgbCoefB;
+              bShape[atr.str()] = shapeCoefB;
+              bObject[atr.str()] = objCoefB;                                                             
 */
      }
      ostringstream dte;
