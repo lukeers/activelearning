@@ -734,7 +734,7 @@ void regularizedLogisticRegression2(string dsLoc,vector<string> trainCls,vector<
 }
 
 void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<string> testSet,map<string,vector<string>> negMapInstances,map<string,string> testFullAnnotation,string trainLocation) {
-     int batch = 1000;
+     int batch = 5000;
      map<string, vector<string>> posPaths;
      map<string, vector<string>> negPaths;
      map<string,vector<vector<double>>> rgbFeatures;
@@ -785,8 +785,8 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
               vector<string> posInstances = it->second;
               string attribute = it->first;
 	      cout << "ATTRIBUTE ==> " << attribute << endl;
-	      if (attribute != "red")
-			continue;
+//	      if (attribute != "red")
+//			continue;
 	      vector<string> negInstances1 = negPaths[attribute];
 	      set<string> s(negInstances1.begin(), negInstances1.end());
               vector<string> negInstances;
@@ -848,36 +848,53 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
               vector<double> shapeCoef(posShapeFeatures[0].size() + 1, 0);
               vector<double> objCoef(posObjFeatures[0].size() + 1, 0);
 	      for(int epochs = 0;epochs < batch; epochs++) {
+		 int index = posRgbFeatures.size();
+		 if (negRgbFeatures.size() < index) {
+			index = negRgbFeatures.size();
+		 }
 
-	         for (int k = 0; k < posRgbFeatures.size();k++) {
-		   // Regularizer
-		   // Loss function  
-		      double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
-		      double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
-		      double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
-
-                      //double gG1 = cReg+ sReg + oReg;
+                 for (int k = 0; k < index; k++) {
+			
+                      double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
+                      double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
+                      double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
                       double gG1 = 0.0;
                       rgbCoef = updateCostFunction(posRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
                       shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,3);
 
+		      cLoss = costFunction(negRgbFeatures.at(k),rgbCoef,0.0);
+                      sLoss =  costFunction(negShapeFeatures.at(k),shapeCoef,0.0);
+                      oLoss =  costFunction(negObjFeatures.at(k),objCoef,0.0);
+
+                      gG1 = 0.0;
+                      rgbCoef = updateCostFunction(negRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
+                      shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
+                      objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
+
 		 }
-		  
-                 for (int k = 0; k < negRgbFeatures.size();k++) {
-                   // Regularizer
-                   //                    // Loss function  
+                 for (int k = index; k < posRgbFeatures.size(); k++) {
+                      double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
+                      double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
+                      double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
+                      double gG1 = 0.0;
+                      rgbCoef = updateCostFunction(posRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
+                      shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
+                      objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,3);
+		 }
+                 for (int k = index; k < negRgbFeatures.size(); k++) {
+
                       double cLoss = costFunction(negRgbFeatures.at(k),rgbCoef,0.0);
                       double sLoss =  costFunction(negShapeFeatures.at(k),shapeCoef,0.0);
                       double oLoss =  costFunction(negObjFeatures.at(k),objCoef,0.0);
 
-                      //double gG1 = cReg+ sReg + oReg;
                       double gG1 = 0.0;
                       rgbCoef = updateCostFunction(negRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
                       shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
 
-                 }
+		 }
+
                  int iter = 500;
                  if ((epochs + 1) % iter == 0) {
                          cout << attribute << "--- Epoch : " << epochs + 1 << endl;
