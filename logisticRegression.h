@@ -88,25 +88,10 @@ double sigmoid(const vector<double>& data,const vector<double>& coef) {
 double costFunction(vector<double> inst,vector<double> coef, double y) {
    double sig = sigmoid(inst,coef);
    double error = y - sig;
-//   cout <<"sig " << sig << ", y---" << y <<", error -- " << error << ", ";
-   double loss = error * sig * (1.0 - sig);
+   return error;
+//   double loss = error * sig * (1.0 - sig);
 //   cout << "los ---" << loss << endl;
-   return loss;
-/*
-   int x = 2;
-   sig = floor( ( sig * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-   error = floor( ( error * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-  coef[0] = coef[0] + error * sig * (1.0 - sig);
-  coef[0] = floor( ( coef[0] * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-//   cout << sig << " " << error << " " << coef[0] << " ";
-   for (int ij = 1; ij < coef.size(); ij++) {
-	   coef[ij] = coef[ij] + error * sig * (1.0 - sig) * inst[ij-1];
-	   coef[ij] = floor( ( coef[ij] * pow( 10,x ) ) + 0.5 ) / pow( 10, x);
-
-   }
-//   cout << coef[1] << endl;
-   return coef;
-*/
+//   return loss;
 }
 double costFunctionBatch(const vector<double>& inst,const vector<double>& coef, const double& y) {
    double sig = sigmoid(inst,coef);
@@ -734,7 +719,7 @@ void regularizedLogisticRegression2(string dsLoc,vector<string> trainCls,vector<
 }
 
 void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<string> testSet,map<string,vector<string>> negMapInstances,map<string,string> testFullAnnotation,string trainLocation) {
-     int batch = 5000;
+     int batch = 10000;
      map<string, vector<string>> posPaths;
      map<string, vector<string>> negPaths;
      map<string,vector<vector<double>>> rgbFeatures;
@@ -781,6 +766,15 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
       map<string, vector<double>> bColor;
       map<string, vector<double>> bShape;
       map<string, vector<double>> bObject;
+
+      map<string, vector<double>> bbColor;
+      map<string, vector<double>> bbShape;
+      map<string, vector<double>> bbObject;
+    
+      map<int, double> convColor;
+      map<int, double> convShape;
+      map<int, double> convObject;
+
      for (map<string, vector<string>>::iterator it=posPaths.begin(); it!=posPaths.end(); ++it) {
               vector<string> posInstances = it->second;
               string attribute = it->first;
@@ -847,6 +841,11 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 	      vector<double> rgbCoef(posRgbFeatures[0].size() + 1, 0);
               vector<double> shapeCoef(posShapeFeatures[0].size() + 1, 0);
               vector<double> objCoef(posObjFeatures[0].size() + 1, 0);
+
+              vector<double> brgbCoef(posRgbFeatures[0].size() + 1, 0);
+              vector<double> bshapeCoef(posShapeFeatures[0].size() + 1, 0);
+              vector<double> bobjCoef(posObjFeatures[0].size() + 1, 0);
+
 	      for(int epochs = 0;epochs < batch; epochs++) {
 		 int index = posRgbFeatures.size();
 		 if (negRgbFeatures.size() < index) {
@@ -854,14 +853,21 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 		 }
 
                  for (int k = 0; k < index; k++) {
-			
+		      double eps = 0.1;
+		      double sig = sigmoid(posRgbFeatures.at(k),rgbCoef);
+		      double sSig = sigmoid(posShapeFeatures.at(k),shapeCoef);
+		      double oSig = sigmoid(posObjFeatures.at(k),objCoef);
+
+	
                       double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
                       double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
                       double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
-                      double gG1 = 0.0;
+
+
+                      double gG1 = (sig * (1.0 - sig) - eps) + (sSig * (1.0 - sSig) - eps) + (oSig * ( 1.0 - oSig) - eps);
                       rgbCoef = updateCostFunction(posRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
-                      shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
-                      objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,3);
+                      shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,1);
+                      objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,1);
 
 		      cLoss = costFunction(negRgbFeatures.at(k),rgbCoef,0.0);
                       sLoss =  costFunction(negShapeFeatures.at(k),shapeCoef,0.0);
@@ -872,15 +878,54 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
                       shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
 
+////////Traditional Methods /////
+                      cLoss = costFunction(posRgbFeatures.at(k),brgbCoef,1.0);
+                      sLoss =  costFunction(posShapeFeatures.at(k),bshapeCoef,1.0);
+                      oLoss =  costFunction(posObjFeatures.at(k),bobjCoef,1.0);
+
+
+		      gG1 = 0.0;
+                      brgbCoef = updateCostFunction(posRgbFeatures.at(k),brgbCoef,cLoss,gG1,1);
+                      bshapeCoef = updateCostFunction(posShapeFeatures.at(k),bshapeCoef,sLoss,gG1,1);
+                      bobjCoef = updateCostFunction(posObjFeatures.at(k),bobjCoef,oLoss,gG1,1);
+
+                      cLoss = costFunction(negRgbFeatures.at(k),brgbCoef,0.0);
+                      sLoss =  costFunction(negShapeFeatures.at(k),bshapeCoef,0.0);
+                      oLoss =  costFunction(negObjFeatures.at(k),bobjCoef,0.0);
+
+                      gG1 = 0.0;
+                      brgbCoef = updateCostFunction(negRgbFeatures.at(k),brgbCoef,cLoss,gG1,1);
+                      bshapeCoef = updateCostFunction(negShapeFeatures.at(k),bshapeCoef,sLoss,gG1,2);
+                      bobjCoef = updateCostFunction(negObjFeatures.at(k),bobjCoef,oLoss,gG1,3);
 		 }
                  for (int k = index; k < posRgbFeatures.size(); k++) {
+		      double eps = 0.1;
+                      double sig = sigmoid(posRgbFeatures.at(k),rgbCoef);
+                      double sSig = sigmoid(posShapeFeatures.at(k),shapeCoef);
+                      double oSig = sigmoid(posObjFeatures.at(k),objCoef);
+
+
                       double cLoss = costFunction(posRgbFeatures.at(k),rgbCoef,1.0);
                       double sLoss =  costFunction(posShapeFeatures.at(k),shapeCoef,1.0);
                       double oLoss =  costFunction(posObjFeatures.at(k),objCoef,1.0);
-                      double gG1 = 0.0;
+                      double gG1 = (sig * (1.0 - sig) - eps) + (sSig * (1.0 - sSig) - eps) + (oSig * ( 1.0 - oSig) - eps);;
                       rgbCoef = updateCostFunction(posRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
                       shapeCoef = updateCostFunction(posShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(posObjFeatures.at(k),objCoef,oLoss,gG1,3);
+////////Traditional Methods /////
+                      cLoss = costFunction(posRgbFeatures.at(k),brgbCoef,1.0);
+                      sLoss =  costFunction(posShapeFeatures.at(k),bshapeCoef,1.0);
+                      oLoss =  costFunction(posObjFeatures.at(k),bobjCoef,1.0);
+
+                 
+                      gG1 = 0.0;
+                      brgbCoef = updateCostFunction(posRgbFeatures.at(k),brgbCoef,cLoss,gG1,1);
+                      bshapeCoef = updateCostFunction(posShapeFeatures.at(k),bshapeCoef,sLoss,gG1,1);
+                      bobjCoef = updateCostFunction(posObjFeatures.at(k),bobjCoef,oLoss,gG1,1);
+
+
+
+
 		 }
                  for (int k = index; k < negRgbFeatures.size(); k++) {
 
@@ -892,18 +937,33 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
                       rgbCoef = updateCostFunction(negRgbFeatures.at(k),rgbCoef,cLoss,gG1,1);
                       shapeCoef = updateCostFunction(negShapeFeatures.at(k),shapeCoef,sLoss,gG1,2);
                       objCoef = updateCostFunction(negObjFeatures.at(k),objCoef,oLoss,gG1,3);
+////////Traditional Methods /////
+
+                      cLoss = costFunction(negRgbFeatures.at(k),brgbCoef,0.0);
+                      sLoss =  costFunction(negShapeFeatures.at(k),bshapeCoef,0.0);
+                      oLoss =  costFunction(negObjFeatures.at(k),bobjCoef,0.0);
+
+                      gG1 = 0.0;
+                      brgbCoef = updateCostFunction(negRgbFeatures.at(k),brgbCoef,cLoss,gG1,1);
+                      bshapeCoef = updateCostFunction(negShapeFeatures.at(k),bshapeCoef,sLoss,gG1,2);
+                      bobjCoef = updateCostFunction(negObjFeatures.at(k),bobjCoef,oLoss,gG1,3);
+
 
 		 }
 
-                 int iter = 500;
+                 int iter = 50;
                  if ((epochs + 1) % iter == 0) {
                          cout << attribute << "--- Epoch : " << epochs + 1 << endl;
-                        double ll = logLikelyHood(posRgbFeatures,negRgbFeatures,rgbCoef);
-                        cout << "Color :: Negative Log Likelihood :: " << ll << endl;
-                        ll = logLikelyHood(posShapeFeatures,negShapeFeatures,shapeCoef);
-                        cout << "Shape :: Negative Log Likelihood :: " << ll << endl;
-                        ll = logLikelyHood(posObjFeatures,negObjFeatures,objCoef);
-                        cout << "Object :: Negative Log Likelihood :: " << ll << endl;
+                        double ll = logLikelyHood(posRgbFeatures,negRgbFeatures,brgbCoef);
+                       // cout << "Color :: Negative Log Likelihood :: " << ll << endl;
+			convColor[epochs + 1] += ll;
+                        ll = logLikelyHood(posShapeFeatures,negShapeFeatures,bshapeCoef);
+                        convShape[epochs + 1] += ll;
+                        //cout << "Shape :: Negative Log Likelihood :: " << ll << endl;
+                        ll = logLikelyHood(posObjFeatures,negObjFeatures,bobjCoef);
+//                        cout << "Object :: Negative Log Likelihood :: " << ll << endl;
+                        convObject[epochs + 1] += ll;
+
                  }                                                            
 	      }
 	      bColor[attribute] = rgbCoef;
@@ -911,6 +971,9 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 	      bObject[attribute] = objCoef;
 
 
+              bbColor[attribute] = brgbCoef;
+              bbShape[attribute] = bshapeCoef;
+              bbObject[attribute] = bobjCoef;
 
 
 //////////////////// Batch Updation /////////
@@ -990,8 +1053,15 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
      int ret = system(cmd.c_str());
 //      string csvFile = dte.str() + "/regularizedResults.csv";
      string csvFile = dte.str() + "/traditionalExecutionResults.csv";
-     testLogRegression(dsLoc,testSet,bColor,bShape,bObject,csvFile,testFullAnnotation);      
-	
+     testLogRegression(dsLoc,testSet,bbColor,bbShape,bbObject,csvFile,testFullAnnotation);      
 
+     csvFile = dte.str() + "/categoricalExecutionResults.csv";
+     testLogRegression(dsLoc,testSet,bColor,bShape,bObject,csvFile,testFullAnnotation);
+
+     cout << endl << endl << "-------Convergence Table------" << endl << "Epoch, Color Log Likelihood, Shape Loglikehood, Object Loglikelihood" << endl;
+     for (map<int, double>::iterator it=convColor.begin(); it!=convColor.end(); ++it) {
+       int ep = it->first; 
+       cout << ep << "," << convColor[ep] << "," << convShape[ep] << "," <<  convObject[ep] << endl;
+     }
 }
 #endif
