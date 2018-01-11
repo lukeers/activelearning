@@ -719,7 +719,7 @@ void regularizedLogisticRegression2(string dsLoc,vector<string> trainCls,vector<
 }
 
 void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<string> testSet,map<string,vector<string>> negMapInstances,map<string,string> testFullAnnotation,string trainLocation) {
-     int batch = 10000;
+     int batch = 2000;
      map<string, vector<string>> posPaths;
      map<string, vector<string>> negPaths;
      map<string,vector<vector<double>>> rgbFeatures;
@@ -951,9 +951,9 @@ void regularizedLogisticRegression(string dsLoc,vector<string> trainCls,vector<s
 
 		 }
 
-                 int iter = 50;
+                 int iter = 1;
                  if ((epochs + 1) % iter == 0) {
-                         cout << attribute << "--- Epoch : " << epochs + 1 << endl;
+                 //        cout << attribute << "--- Epoch : " << epochs + 1 << endl;
                         double ll = logLikelyHood(posRgbFeatures,negRgbFeatures,brgbCoef);
                        // cout << "Color :: Negative Log Likelihood :: " << ll << endl;
 			convColor[epochs + 1] += ll;
