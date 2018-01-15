@@ -5,10 +5,16 @@ import pandas as pd
 import random
 from collections import Counter
 
+from sklearn import linear_model
+from sklearn import metrics
+from sklearn.metrics import precision_recall_fscore_support
+import csv 
+
+kinds = np.array(['rgb','shape','object'])
+
 class Category:
    
    catNums = np.array([], dtype='object')
-   kinds = np.array(['color','shape','object'])
    def __init__(self, name):
         self.name = name
    def getName(self):
@@ -25,22 +31,23 @@ class Category:
 class Instance(Category):
 
     tokens = np.array([])
-
+    fS = {}
     def __init__(self, name,num):
         self.name = name
         self.catNum = num
 
     def findFeatureValues(self,dsPath):
         instName = self.name
-        instName.trim()
-        path = dsPath + "/" + instName + "/"
-        for kind in self.kinds:
-           path  += "/" + kind + ".log"
+        instName.strip()
+        ar1 = instName.split("/")
+        path1 = "/".join([dsPath,instName])
+        for kind in kinds:
+           path  = path1 + "/" + ar1[1] + "_" + kind + ".log"
            featureSet = read_table(path,sep=',',  header=None)
-           self.fS[kind] = np.array(featureSet)
+           self.fS[kind] = featureSet
 
     def getFeatures(self,kind):
-       return self.fS[kind] 
+       return self.fS[kind].values
     
     def addNegatives(self, negs):
        add = lambda x : np.unique(map(str.strip,x))
@@ -54,6 +61,24 @@ class Instance(Category):
 
     def getTokens(self):
        return self.tokens
+
+    def getY(self,token,kind):
+       generalColors = ['yellow','blue','purple','black','isyellow','green','brown','orange','white','red']
+
+       generalObjs = ['potatoe','cylinder','square', 'cuboid', 'sphere', 'halfcircle','circle','rectangle','cube','triangle','arch','semicircle','halfcylinder','wedge','block','apple','carrot','tomato','lemon','cherry','lime', 'banana','corn','hemisphere','cucumber','cabbage','ear','potato', 'plantain','eggplant'] 
+
+       generalShapes = ['spherical', 'cylinder', 'square', 'rounded', 'cylindershaped', 'cuboid', 'rectangleshape','arcshape', 'sphere', 'archshaped', 'cubeshaped', 'curved' ,'rectangular', 'triangleshaped', 'halfcircle', 'globular','halfcylindrical', 'circle', 'rectangle', 'circular', 'cube', 'triangle', 'cubic', 'triangular', 'cylindrical','arch','semicircle', 'squareshape', 'arched','curve', 'halfcylinder', 'wedge', 'cylindershape', 'round', 'block', 'cuboidshaped']
+       if token in list(self.tokens):
+          if kind == "rgb":
+              if token in list(generalColors):
+                 return 1
+          elif kind == "shape":
+             if token in list(generalShapes):
+                 return 1
+          else:
+             if token in list(generalObjs):
+                return 1
+       return 0
 
 class Token:
    __slots__ = ['name', 'posInstances', 'negInstances']
@@ -77,7 +102,20 @@ class Token:
 
    def getNegatives(self):
       return self.negInstances
-   
+
+   def shuffle(self,a, b, rand_state):
+      rand_state.shuffle(a)
+      rand_state.shuffle(b)
+
+   def getTrainFiles(self,insts,kind):
+      instances = insts.to_dict()
+      features = np.vstack(instances[inst][0].getFeatures(kind) for inst in self.posInstances)
+      negFeatures = np.vstack(instances[inst][0].getFeatures(kind) for inst in self.negInstances if len(inst) > 1)
+      y = np.concatenate((np.full(len(features),1),np.full(len(negFeatures),0)))
+      features = np.vstack([features,negFeatures])
+      self.shuffle(features,y, np.random.RandomState(12345))
+      return(features,y)
+
 
 class DataSet:
    def __init__(self, path,anFile,negFile):
@@ -115,7 +153,7 @@ class DataSet:
 
    def getDataSet(self):
       (cDf,nDf) = self.addNegativeToInstances()
-      negs = self.splitTestInstances(cDf)
+      tests = self.splitTestInstances(cDf)
 #      print negs
       instances = nDf.to_dict()
 #      print instances['arch/arch_1'][0].getName()
@@ -128,9 +166,9 @@ class DataSet:
         dsTokens = list(filter(None, dsTokens))
         instances[ds][0].addTokens(dsTokens)
 
-        if ds not in negs:
+        if ds not in tests:
          negatives = instances[ds][0].getNegatives()
-         negatives = [xx for xx in negatives if xx not in negs]
+         negatives = [xx for xx in negatives if xx not in tests]
          for annotation in dsTokens:
              if annotation not in tokenDf.keys():
                  tokenDf[annotation] = Token(annotation)
@@ -139,15 +177,70 @@ class DataSet:
              tokenDf[annotation].extendPositives(ds) 
              tokenDf[annotation].extendNegatives(negatives)
       tks = pd.DataFrame(tokenDf,index=[0])
-      return (nDf,tks,negs)
- 
+      return (nDf,tks,tests)
+
+   def getAllFeatures(self,nDf):
+      instances = nDf.to_dict()
+      for inst in instances.keys():
+         objInst = instances[inst][0]
+         objInst.findFeatureValues(dsPath)
+              
+def getTestFiles(insts,kind,tests,token):
+   instances = insts.to_dict()
+   features = np.array([])
+   y = np.array([])
+   for nInst in tests:
+      y1 = instances[nInst][0].getY(token,kind)
+
+      #print nInst,Counter(instances[nInst][0].getTokens())
+      if features.size == 0 :
+        features = instances[nInst][0].getFeatures(kind)
+        y = np.full(len(features),y1)
+      else :
+        fs  = instances[nInst][0].getFeatures(kind)
+        features = np.vstack([features, fs])
+        y = np.append(y,np.full(len(fs),y1))
+   return(features,y)
+    
+
+def findTrainTestFeatures(insts,tkns,tests):
+  tokenDict = tkns.to_dict()
+  for token in tokenDict.keys():
+     objTkn = tokenDict[token][0]
+     for kind in kinds:
+        (features,y) = objTkn.getTrainFiles(insts,kind)
+        (testFeatures,testY) = getTestFiles(insts,kind,tests,token)
+        yield (token,kind,features,y,testFeatures,testY)
+
+def callML(insts,tkns,tests):
+  csvFile = open('results.csv', 'w')
+  fieldnames = np.array(['Token','Type'])
+  fieldnames = np.append(fieldnames,['Accuracy','Precision','Recall','F1-Square','Results'])
+  fieldnames = np.append(fieldnames,tests)
+  writer = csv.DictWriter(csvFile, fieldnames=fieldnames)
+  writer.writeheader()
+  pNum = 4
+  for (token,kind,X,Y,testX,testY) in findTrainTestFeatures(insts,tkns,tests):
+    logreg = linear_model.LogisticRegression(C=1e5)
+    logreg.fit(X, Y)
+    predY = logreg.predict(testX)  
+    (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='weighted',beta = 1.0)
+    acc = logreg.score(testX, testY)
+    if kind == "rgb":
+        writer.writerow({'Type':'Ground Truth','Results':",".join(str(testY))})
+    writer.writerow({'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Square' : round(f1square,pNum),'Results': ",".join(str(predY))})
+  csvFile.close()
+
 if __name__== "__main__":
 
-  dsPath = "/home/npillai1/AL/pyal/images"
+  dsPath = "/home/npillai1/AL/images/pNmPx/"
   anFile = "/home/npillai1/AL/ConfFile/3k_Thresh_fulldataset.conf"
   negFile = "/home/npillai1/AL/ConfFile/negLabels.log"
+  
   ds = DataSet(dsPath,anFile,negFile)
-  (insts,tokens,negs) = ds.getDataSet()
+  (insts,tokens,tests) = ds.getDataSet()
+  ds.getAllFeatures(insts)
+  callML(insts,tokens,tests)
   print "Hi Welcome to AL !!"
 
 #  instances = insts.to_dict()
