@@ -11,6 +11,9 @@ from sklearn.metrics import precision_recall_fscore_support
 import csv 
 
 kinds = np.array(['rgb','shape','object'])
+execPath = '/Users/nishapillai/Documents/GitHub/alExec/'
+dsPath = execPath + "pNmPx/"
+fAnnotation = execPath + "annotation.conf"
 
 class Category:
    
@@ -46,9 +49,18 @@ class Instance(Category):
            featureSet = read_table(path,sep=',',  header=None)
            self.fS[kind] = featureSet
 
-    def getFeatures(self,kind):
+    def getFeatures1(self,kind):
        return self.fS[kind].values
-    
+
+    def getFeatures(self,kind):
+        instName = self.name
+        instName.strip()
+        ar1 = instName.split("/")
+        path1 = "/".join([dsPath,instName])
+        path  = path1 + "/" + ar1[1] + "_" + kind + ".log"
+        featureSet = read_table(path,sep=',',  header=None)
+        return featureSet.values
+
     def addNegatives(self, negs):
        add = lambda x : np.unique(map(str.strip,x))
        self.negs = add(negs)
@@ -205,9 +217,11 @@ def getTestFiles(insts,kind,tests,token):
 
 def findTrainTestFeatures(insts,tkns,tests):
   tokenDict = tkns.to_dict()
-  for token in tokenDict.keys():
+  for token in ['yellow']:
+#  for token in tokenDict.keys():
      objTkn = tokenDict[token][0]
-     for kind in kinds:
+#     for kind in kinds:
+     for kind in ['rgb']: 
         (features,y) = objTkn.getTrainFiles(insts,kind)
         (testFeatures,testY) = getTestFiles(insts,kind,tests,token)
         yield (token,kind,features,y,testFeatures,testY)
@@ -219,13 +233,42 @@ def callML(insts,tkns,tests):
   fieldnames = np.append(fieldnames,tests)
   writer = csv.DictWriter(csvFile, fieldnames=fieldnames)
   writer.writeheader()
+  featureSet = read_table(fAnnotation,sep=',',  header=None)
+  featureSet = featureSet.values
+  fSet = dict(zip(featureSet[:,0],featureSet[:,1]))
   pNum = 4
   for (token,kind,X,Y,testX,testY) in findTrainTestFeatures(insts,tkns,tests):
+    print "Token : " + token + ", Kind : " + kind
+    for c in [0.1,20.0,0.5]:
+       for sl in ['newton-cg','lbfgs','liblinear','sag']:
+         for iter in [10,10000,50]:
+            print 'c :',c,', solver : ',sl,', iter : ',iter
+            logreg = linear_model.LogisticRegression(penalty='l2',dual=False,tol=0.0001,C=c,class_weight=None,random_state=None,solver=sl,max_iter=iter)
+            logreg.fit(X, Y)
+            predY = logreg.predict(testX)
+            (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
+            acc = logreg.score(testX, testY)
+            print zip(range(len(tests)),tests)
+            print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))
+            print testY
+            print predY
+            print acc,prec,recall,f1square
+            print "\n\n"
+     
+    exit(0)
+    print zip(range(len(tests)),tests)
+    print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))  
     logreg = linear_model.LogisticRegression(C=1e5)
     logreg.fit(X, Y)
     predY = logreg.predict(testX)  
-    (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='weighted',beta = 1.0)
+    (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
     acc = logreg.score(testX, testY)
+    #print list(logreg.decision_function(testX))
+    print testY
+    print predY
+    print acc,prec,recall,f1square
+   
+    exit(0)
     if kind == "rgb":
         writer.writerow({'Type':'Ground Truth','Results':",".join(str(testY))})
     writer.writerow({'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Square' : round(f1square,pNum),'Results': ",".join(str(predY))})
@@ -233,9 +276,8 @@ def callML(insts,tkns,tests):
 
 if __name__== "__main__":
 
-  dsPath = "/home/npillai1/AL/images/pNmPx/"
-  anFile = "/home/npillai1/AL/ConfFile/3k_Thresh_fulldataset.conf"
-  negFile = "/home/npillai1/AL/ConfFile/negLabels.log"
+  anFile = execPath + "3k_Thresh_fulldataset.conf"
+  negFile = execPath + "negLabels.log"
   
   ds = DataSet(dsPath,anFile,negFile)
   (insts,tokens,tests) = ds.getDataSet()
