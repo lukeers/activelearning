@@ -15,8 +15,16 @@ execPath = '/Users/nishapillai/Documents/GitHub/alExec/'
 dsPath = execPath + "pNmPx/"
 fAnnotation = execPath + "annotation.conf"
 
+
+generalColors = ['yellow','blue','purple','black','isyellow','green','brown','orange','white','red']
+
+generalObjs = ['potatoe','cylinder','square', 'cuboid', 'sphere', 'halfcircle','circle','rectangle','cube','triangle','arch','semicircle','halfcylinder','wedge','block','apple','carrot','tomato','lemon','cherry','lime', 'banana','corn','hemisphere','cucumber','cabbage','ear','potato', 'plantain','eggplant']
+
+generalShapes = ['spherical', 'cylinder', 'square', 'rounded', 'cylindershaped', 'cuboid', 'rectangleshape','arcshape', 'sphere', 'archshaped', 'cubeshaped', 'curved' ,'rectangular', 'triangleshaped', 'halfcircle', 'globular','halfcylindrical', 'circle', 'rectangle', 'circular', 'cube', 'triangle', 'cubic', 'triangular', 'cylindrical','arch','semicircle', 'squareshape', 'arched','curve', 'halfcylinder', 'wedge', 'cylindershape', 'round', 'block', 'cuboidshaped']
+
+
 class Category:
-   
+   __slots__ = ['catNums', 'name']  
    catNums = np.array([], dtype='object')
    def __init__(self, name):
         self.name = name
@@ -32,6 +40,7 @@ class Category:
       return instName
 
 class Instance(Category):
+    __slots__ = ['name','catNum','tokens','fS','negs']
 
     tokens = np.array([])
     fS = {}
@@ -75,11 +84,6 @@ class Instance(Category):
        return self.tokens
 
     def getY(self,token,kind):
-       generalColors = ['yellow','blue','purple','black','isyellow','green','brown','orange','white','red']
-
-       generalObjs = ['potatoe','cylinder','square', 'cuboid', 'sphere', 'halfcircle','circle','rectangle','cube','triangle','arch','semicircle','halfcylinder','wedge','block','apple','carrot','tomato','lemon','cherry','lime', 'banana','corn','hemisphere','cucumber','cabbage','ear','potato', 'plantain','eggplant'] 
-
-       generalShapes = ['spherical', 'cylinder', 'square', 'rounded', 'cylindershaped', 'cuboid', 'rectangleshape','arcshape', 'sphere', 'archshaped', 'cubeshaped', 'curved' ,'rectangular', 'triangleshaped', 'halfcircle', 'globular','halfcylindrical', 'circle', 'rectangle', 'circular', 'cube', 'triangle', 'cubic', 'triangular', 'cylindrical','arch','semicircle', 'squareshape', 'arched','curve', 'halfcylinder', 'wedge', 'cylindershape', 'round', 'block', 'cuboidshaped']
        if token in list(self.tokens):
           if kind == "rgb":
               if token in list(generalColors):
@@ -123,13 +127,21 @@ class Token:
       instances = insts.to_dict()
       features = np.vstack(instances[inst][0].getFeatures(kind) for inst in self.posInstances)
       negFeatures = np.vstack(instances[inst][0].getFeatures(kind) for inst in self.negInstances if len(inst) > 1)
+      if len(features) > len(negFeatures):
+          c = int(len(features) / len(negFeatures))
+          negFeatures = np.tile(negFeatures,(c,1))
+      if len(negFeatures) > len(features):
+          c = int(len(negFeatures) / len(features))
+          features = np.tile(features,(c,1))
       y = np.concatenate((np.full(len(features),1),np.full(len(negFeatures),0)))
       features = np.vstack([features,negFeatures])
+      features = features * 255
       self.shuffle(features,y, np.random.RandomState(12345))
       return(features,y)
 
 
 class DataSet:
+   __slots__ = ['dsPath', 'annotationFile', 'negDatasetCollection']
    def __init__(self, path,anFile,negFile):
       self.dsPath = path
       self.annotationFile = anFile
@@ -212,6 +224,7 @@ def getTestFiles(insts,kind,tests,token):
         fs  = instances[nInst][0].getFeatures(kind)
         features = np.vstack([features, fs])
         y = np.append(y,np.full(len(fs),y1))
+   features = features * 255
    return(features,y)
     
 
@@ -238,12 +251,29 @@ def callML(insts,tkns,tests):
   fSet = dict(zip(featureSet[:,0],featureSet[:,1]))
   pNum = 4
   for (token,kind,X,Y,testX,testY) in findTrainTestFeatures(insts,tkns,tests):
-    print "Token : " + token + ", Kind : " + kind
-    for c in [0.1,20.0,0.5]:
-       for sl in ['newton-cg','lbfgs','liblinear','sag']:
-         for iter in [10,10000,50]:
-            print 'c :',c,', solver : ',sl,', iter : ',iter
-            logreg = linear_model.LogisticRegression(penalty='l2',dual=False,tol=0.0001,C=c,class_weight=None,random_state=None,solver=sl,max_iter=iter)
+   print "Token : " + token + ", Kind : " + kind
+   logreg = linear_model.Perceptron()
+   logreg.fit(X, Y)
+   predY = logreg.predict(testX)
+   (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
+   acc = logreg.score(testX, testY)   
+   print zip(range(len(tests)),tests)
+   print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))
+   print testY
+   print predY
+   print acc,prec,recall,f1square
+   #print testX
+   #print logreg.decision_function(testX)
+   exit(0)
+   for ls in ['hinge','log','modified_huber','squared_hinge','perceptron']:
+  
+    for pen in ['l1','l2','elasticnet']:
+     for lrate in ['constant','optimal','invscaling']:
+      for et in np.arange(0.5,10.0,0.5):
+         for iter in np.arange(10,10000,50):
+            print ls,pen,lrate,et,iter
+            logreg = linear_model.SGDClassifier(loss=ls,penalty=pen,n_iter=iter,learning_rate=lrate,eta0=et,class_weight='balanced')
+#            logreg = linear_model.SGDClassifier(penalty='l2',dual=False,tol=0.0001,C=c,class_weight=None,random_state=None,solver=sl,max_iter=iter)
             logreg.fit(X, Y)
             predY = logreg.predict(testX)
             (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
