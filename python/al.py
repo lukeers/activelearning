@@ -4,6 +4,7 @@ from pandas import DataFrame, read_table
 import pandas as pd
 import random
 from collections import Counter
+import json
 
 from sklearn import linear_model
 from sklearn import metrics
@@ -251,6 +252,24 @@ def callML(insts,tkns,tests):
   fSet = dict(zip(featureSet[:,0],featureSet[:,1]))
   pNum = 4
   for (token,kind,X,Y,testX,testY) in findTrainTestFeatures(insts,tkns,tests):
+   #s = zip(json.dumps(X[0].tolist()),Y[0])
+   from cStringIO import StringIO
+   print "R,G,B,class"
+   sX = X
+   sY = Y
+   for i in range(len(sX)):
+      s = StringIO()
+      np.savetxt(s, sX[i], fmt='%.5f', newline=",")
+      print s.getvalue(),sY[i]
+   print "R,G,B,class"
+   sX = testX
+   sY = testY
+   for i in range(len(sX)):
+      s = StringIO()
+      np.savetxt(s, sX[i], fmt='%.5f', newline=",")
+      print s.getvalue(),sY[i]
+
+   exit(0)
    print "Token : " + token + ", Kind : " + kind
    logreg = linear_model.Perceptron()
    logreg.fit(X, Y)
@@ -264,6 +283,8 @@ def callML(insts,tkns,tests):
    print acc,prec,recall,f1square
    #print testX
    #print logreg.decision_function(testX)
+   
+   print zip(X[1:len(X)],Y)
    exit(0)
    for ls in ['hinge','log','modified_huber','squared_hinge','perceptron']:
   
