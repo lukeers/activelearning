@@ -5,7 +5,8 @@ import pandas as pd
 import random
 from collections import Counter
 import json
-
+import os
+from datetime import datetime
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (brier_score_loss, precision_score, recall_score,f1_score)
 from sklearn import linear_model
@@ -223,6 +224,7 @@ class DataSet:
       negInstances = np.array([])
       for (cat, obj) in cats.items():
          negInstances = np.append(negInstances,obj[0].chooseOneInstance())
+      negInstances = np.sort(negInstances)
       return negInstances
 
    def getDataSet(self):
@@ -310,7 +312,7 @@ def  findScoresManual(ttY,predY):
 def findTrainTestFeatures(insts,tkns,tests):
   tokenDict = tkns.to_dict()
 #  for token in ['blue']:
-  for token in tokenDict.keys():
+  for token in np.sort(tokenDict.keys()):
      objTkn = tokenDict[token][0]
      for kind in kinds:
 #     for kind in ['rgb']: 
@@ -356,15 +358,28 @@ def Experiments(X,Y):
                          ("logistic", sgdK)])
 
 
+def findSameCategoryIndices(tests,kind):
+   gt = ""
+   if kind == "rgb":
+      gt = cGT
+   elif kind == "shape":
+      gt = sGT
+   else:
+      gt = oGT
+   sameCat = [(y1,c) for c in range(len(tests)) for y1 in gt[tests[c]]]
+   d = {}
+   for k, v in sameCat:
+      d.setdefault(k, []).append(v)
+   return d
 
-def callML(insts,tkns,tests):
-  confFile = open('groundTruthConfMatrix.csv','w')
+def callML(resultDir,insts,tkns,tests):
+  confFile = open(resultDir + '/groundTruthPrediction.csv','w')
   fldNames = np.array(['Token','Type'])
   fldNames = np.append(fldNames,tests)
   confWriter = csv.DictWriter(confFile, fieldnames=fldNames)
   confWriter.writeheader()
 
-  csvFile = open('groundTruthResults.csv', 'w')
+  csvFile = open(resultDir + '/groundTruthResults.csv', 'w')
   fieldnames = np.array(['Token','Type'])
   fieldnames = np.append(fieldnames,['Accuracy','Precision','Recall','F1-Score','Results'])
   fieldnames = np.append(fieldnames,tests)
@@ -378,6 +393,18 @@ def callML(insts,tkns,tests):
      confD[tt] = str(fSet[tt])
   confWriter.writerow(confD)
   pNum = 4
+  catGroups = {}
+  for kind in kinds:
+     catGroups[kind] = findSameCategoryIndices(tests,kind)
+
+  kindWriter = {}
+  kindConfFile = {}
+  for kind in kinds:
+     kindConfFile[kind] = open(resultDir + '/' + kind + 'groundTruthConfMatrix.csv','w')
+     kkeys = np.array(['Token','Type'])
+     kkeys = np.append(kkeys,np.sort(catGroups[kind].keys()))
+     kindWriter[kind] = csv.DictWriter(kindConfFile[kind],fieldnames=kkeys)
+     kindWriter[kind].writeheader()
   for (token,kind,X,Y,tX,tY) in findTrainTestFeatures(insts,tkns,tests):
    print "Token : " + token + ", Kind : " + kind
    polynomial_features = PolynomialFeatures(degree=2,include_bias=False)
@@ -391,6 +418,7 @@ def callML(insts,tkns,tests):
    tAcc = []
    tPrec = []
    tRec = []
+   tcatProb = []
    confDict = {'Token' : token,'Type' : kind}
    for ii in range(len(tX)) :
       testX = tX[ii]
@@ -422,6 +450,7 @@ def callML(insts,tkns,tests):
       tConf = float(sum(tProbs)/len(tProbs))
 #      confDict[tt] = str(tConf) + " [" + ",".join(str(tProbs)) + "] "
       confDict[tt] = str(tConf)
+      tcatProb.append(tConf)
 #      print "\n"
     
    confWriter.writerow(confDict)
@@ -439,8 +468,16 @@ def callML(insts,tkns,tests):
    dict2.update(dict1)
 #   writer.writerow({'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Score' : round(f1score,pNum),'Results': ",".join(str(predY))})
    writer.writerow(dict2)
+   dict1 = {'Token' : token,'Type' : kind}
+   tcatProb = np.array(tcatProb)
+   for k in np.sort(catGroups[kind].keys()):
+         inds = catGroups[kind][k]
+         dict1.update({k : (sum(tcatProb[inds]) / len(inds))})
+   kindWriter[kind].writerow(dict1)
   csvFile.close()
   confFile.close()
+  for kind in kinds:
+    kindConfFile[kind].close()
 
 def generateNegativeTrainingFiles(nDf,tkns,tests):
    instances = nDf.to_dict()
@@ -478,11 +515,15 @@ def getAllGroundTruths(nDf,cGTFile,sGTFile,oGTFile):
       gt[ds] = dsYs
 
 if __name__== "__main__":
-
+#  print "START :: " + str(pd.to_datetime('now'))
+  print "START :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   anFile =  execPath + "groundtruth_annotation.conf"
   cGTFile = execPath + "color_groundtruth_annotation.conf"
   sGTFile = execPath + "shape_groundtruth_annotation.conf"
   oGTFile = execPath + "object_groundtruth_annotation.conf"
+  resultDir = "Results/3"
+  os.system("rm -rf " + resultDir)
+  os.system("mkdir -p " + resultDir)
 
   ds = DataSet(dsPath,anFile)
   (insts,tokens,tests) = ds.getDataSet()
@@ -492,9 +533,9 @@ if __name__== "__main__":
 
   ds.getAllFeatures(insts)
 
-  callML(insts,tokens,tests)
-  print "Hi Welcome to AL !!"
-
+  callML(resultDir,insts,tokens,tests)
+  print "END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+#  print "END :: " + str(pd.to_datetime('now'))
 #  instances = insts.to_dict()
 #  print Counter(instances['arch/arch_1'][0].getTokens())
 #  tks = tokens.to_dict()
