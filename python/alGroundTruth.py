@@ -17,8 +17,8 @@ from sklearn.linear_model import LinearRegression
 
 kinds = np.array(['rgb','shape'])
 execPath = '/Users/nishapillai/Documents/GitHub/alExec/'
-dsPath = execPath + "nPx/"
-fAnnotation = execPath + "toy_groundtruth_annotation.conf"
+dsPath = execPath + "nDz/"
+fAnnotation = execPath + "groundtruth_annotation.conf"
 
 cGT = {}
 sGT = {}
@@ -358,13 +358,13 @@ def Experiments(X,Y):
 
 
 def callML(insts,tkns,tests):
-  confFile = open('toySetConfMatrix.csv','w')
+  confFile = open('groundTruthConfMatrix.csv','w')
   fldNames = np.array(['Token','Type'])
   fldNames = np.append(fldNames,tests)
   confWriter = csv.DictWriter(confFile, fieldnames=fldNames)
   confWriter.writeheader()
 
-  csvFile = open('toySetResults.csv', 'w')
+  csvFile = open('groundTruthResults.csv', 'w')
   fieldnames = np.array(['Token','Type'])
   fieldnames = np.append(fieldnames,['Accuracy','Precision','Recall','F1-Score','Results'])
   fieldnames = np.append(fieldnames,tests)
@@ -479,12 +479,10 @@ def getAllGroundTruths(nDf,cGTFile,sGTFile,oGTFile):
 
 if __name__== "__main__":
 
-#  anFile = execPath + "yellow_blue_red_DataSet.conf"  
-#  negFile = execPath + "yellow_blue_red_negFile.conf"
-  anFile =  execPath + "toy_groundtruth_annotation.conf"
-  cGTFile = execPath + "color_toy_groundtruth.conf"
-  sGTFile = execPath + "shape_toy_groundtruth.conf"
-  oGTFile = execPath + "object_toy_groundtruth.conf"
+  anFile =  execPath + "groundtruth_annotation.conf"
+  cGTFile = execPath + "color_groundtruth_annotation.conf"
+  sGTFile = execPath + "shape_groundtruth_annotation.conf"
+  oGTFile = execPath + "object_groundtruth_annotation.conf"
 
   ds = DataSet(dsPath,anFile)
   (insts,tokens,tests) = ds.getDataSet()

@@ -6,6 +6,7 @@ import random
 from collections import Counter
 import json
 
+from sklearn.metrics import (brier_score_loss, precision_score, recall_score,f1_score)
 from sklearn import linear_model
 from sklearn import metrics
 from sklearn.metrics import precision_recall_fscore_support
@@ -48,6 +49,9 @@ class Instance(Category):
     def __init__(self, name,num):
         self.name = name
         self.catNum = num
+
+    def getName(self):
+       return self.name
 
     def findFeatureValues(self,dsPath):
         instName = self.name
@@ -120,6 +124,9 @@ class Token:
    def getNegatives(self):
       return self.negInstances
 
+   def clearNegatives(self):
+      self.negInstances = np.array([])
+
    def shuffle(self,a, b, rand_state):
       rand_state.shuffle(a)
       rand_state.shuffle(b)
@@ -137,7 +144,7 @@ class Token:
       y = np.concatenate((np.full(len(features),1),np.full(len(negFeatures),0)))
       features = np.vstack([features,negFeatures])
       features = features * 255
-      self.shuffle(features,y, np.random.RandomState(12345))
+#      self.shuffle(features,y, np.random.RandomState(12345))
       return(features,y)
 
 
@@ -231,19 +238,19 @@ def getTestFiles(insts,kind,tests,token):
 
 def findTrainTestFeatures(insts,tkns,tests):
   tokenDict = tkns.to_dict()
-  for token in ['yellow']:
-#  for token in tokenDict.keys():
+#  for token in ['red']:
+  for token in tokenDict.keys():
      objTkn = tokenDict[token][0]
-#     for kind in kinds:
-     for kind in ['rgb']: 
+     for kind in kinds:
+#     for kind in ['rgb']: 
         (features,y) = objTkn.getTrainFiles(insts,kind)
         (testFeatures,testY) = getTestFiles(insts,kind,tests,token)
         yield (token,kind,features,y,testFeatures,testY)
 
 def callML(insts,tkns,tests):
-  csvFile = open('results.csv', 'w')
+  csvFile = open('fullDSResults.csv', 'w')
   fieldnames = np.array(['Token','Type'])
-  fieldnames = np.append(fieldnames,['Accuracy','Precision','Recall','F1-Square','Results'])
+  fieldnames = np.append(fieldnames,['Accuracy','Precision','Recall','F1-Score','Results'])
   fieldnames = np.append(fieldnames,tests)
   writer = csv.DictWriter(csvFile, fieldnames=fieldnames)
   writer.writeheader()
@@ -253,85 +260,80 @@ def callML(insts,tkns,tests):
   pNum = 4
   for (token,kind,X,Y,testX,testY) in findTrainTestFeatures(insts,tkns,tests):
    #s = zip(json.dumps(X[0].tolist()),Y[0])
-   from cStringIO import StringIO
-   print "R,G,B,class"
-   sX = X
-   sY = Y
-   for i in range(len(sX)):
-      s = StringIO()
-      np.savetxt(s, sX[i], fmt='%.5f', newline=",")
-      print s.getvalue(),sY[i]
-   print "R,G,B,class"
-   sX = testX
-   sY = testY
-   for i in range(len(sX)):
-      s = StringIO()
-      np.savetxt(s, sX[i], fmt='%.5f', newline=",")
-      print s.getvalue(),sY[i]
+   #from cStringIO import StringIO
+   #print "R,G,B,class"
+   #sX = X
+   #sY = Y
+   #for i in range(len(sX)):
+   #   s = StringIO()
+   #   np.savetxt(s, sX[i], fmt='%.5f', newline=",")
+   #   print s.getvalue(),sY[i]
+   #print "R,G,B,class"
+   #sX = testX
+   #sY = testY
+   #for i in range(len(sX)):
+   #   s = StringIO()
+   #   np.savetxt(s, sX[i], fmt='%.5f', newline=",")
+   #   print s.getvalue(),sY[i]
 
-   exit(0)
-   print "Token : " + token + ", Kind : " + kind
-   logreg = linear_model.Perceptron()
-   logreg.fit(X, Y)
-   predY = logreg.predict(testX)
-   (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
-   acc = logreg.score(testX, testY)   
-   print zip(range(len(tests)),tests)
-   print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))
-   print testY
-   print predY
-   print acc,prec,recall,f1square
+    print "Token : " + token + ", Kind : " + kind
+   #logreg = linear_model.LogisticRegression()
+   #logreg.fit(X, Y)
+   #predY = logreg.predict(testX)
+   #(prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='weighted')
+   #prec = precision_score(testY,predY)
+   #recall = recall_score(testY,predY)
+   #f1square = f1_score(testY,predY)
+   #acc = logreg.score(testX, testY)   
+   #print zip(range(len(tests)),tests)
+   #print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))
+   #print testY
+   #print predY
+   #print acc,prec,recall,f1square
    #print testX
    #print logreg.decision_function(testX)
    
-   print zip(X[1:len(X)],Y)
-   exit(0)
-   for ls in ['hinge','log','modified_huber','squared_hinge','perceptron']:
-  
-    for pen in ['l1','l2','elasticnet']:
-     for lrate in ['constant','optimal','invscaling']:
-      for et in np.arange(0.5,10.0,0.5):
-         for iter in np.arange(10,10000,50):
-            print ls,pen,lrate,et,iter
-            logreg = linear_model.SGDClassifier(loss=ls,penalty=pen,n_iter=iter,learning_rate=lrate,eta0=et,class_weight='balanced')
-#            logreg = linear_model.SGDClassifier(penalty='l2',dual=False,tol=0.0001,C=c,class_weight=None,random_state=None,solver=sl,max_iter=iter)
-            logreg.fit(X, Y)
-            predY = logreg.predict(testX)
-            (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
-            acc = logreg.score(testX, testY)
-            print zip(range(len(tests)),tests)
-            print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))
-            print testY
-            print predY
-            print acc,prec,recall,f1square
-            print "\n\n"
-     
-    exit(0)
-    print zip(range(len(tests)),tests)
-    print zip(range(len(tests)),map(lambda x : fSet[x.split("/")[1]],tests))  
     logreg = linear_model.LogisticRegression(C=1e5)
     logreg.fit(X, Y)
     predY = logreg.predict(testX)  
-    (prec,recall,f1square,_)  = precision_recall_fscore_support(testY, predY,average='binary')
+    (prec,recall,f1score,_)  = precision_recall_fscore_support(testY, predY,average='weighted')
     acc = logreg.score(testX, testY)
     #print list(logreg.decision_function(testX))
-    print testY
+    #print testY
+    #print predY
+    print acc,prec,recall,f1score
     print predY
-    print acc,prec,recall,f1square
-   
-    exit(0)
-    if kind == "rgb":
-        writer.writerow({'Type':'Ground Truth','Results':",".join(str(testY))})
-    writer.writerow({'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Square' : round(f1square,pNum),'Results': ",".join(str(predY))})
+    print logreg.predict_proba(testX)
+#    if kind == "rgb":
+#        writer.writerow({'Type':'Ground Truth','Results':",".join(str(testY))})
+    writer.writerow({'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Score' : round(f1score,pNum)})
   csvFile.close()
+
+def generateNegativeTrainingFiles(nDf,tkns,tests):
+   instances = nDf.to_dict()
+   tokenDict = tkns.to_dict()
+#   for token in ['yellow']:
+   for token in tokenDict.keys():
+     objTkn = tokenDict[token][0]
+     objTkn.clearNegatives()
+     tknAr = []
+     for inst in instances.keys():
+      objInst = instances[inst][0]
+      if (inst not in tests) and (token not in objInst.getTokens()):
+       tknAr.append(objInst.getName())
+     objTkn.extendNegatives(tknAr)
+     
 
 if __name__== "__main__":
 
-  anFile = execPath + "3k_Thresh_fulldataset.conf"
-  negFile = execPath + "negLabels.log"
-  
+#  anFile = execPath + "3k_Thresh_fulldataset.conf"
+#  negFile = execPath + "negLabels.log"
+  anFile = execPath + "yellow_blue_red_DataSet.conf"  
+  negFile = execPath + "yellow_blue_red_negFile.conf"
+
   ds = DataSet(dsPath,anFile,negFile)
   (insts,tokens,tests) = ds.getDataSet()
+  generateNegativeTrainingFiles(insts,tokens,tests)
   ds.getAllFeatures(insts)
   callML(insts,tokens,tests)
   print "Hi Welcome to AL !!"
