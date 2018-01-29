@@ -6,6 +6,7 @@ import random
 from collections import Counter
 import json
 import os
+import math
 from datetime import datetime
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (brier_score_loss, precision_score, recall_score,f1_score)
@@ -16,6 +17,8 @@ import csv
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA, KernelPCA
+from sklearn.cluster import DBSCAN
+from sklearn.cluster import AgglomerativeClustering
 
 kinds = np.array(['rgb','shape','object'])
 execPath = '/Users/nishapillai/Documents/GitHub/alExec/'
@@ -228,6 +231,56 @@ class DataSet:
       negInstances = np.sort(negInstances)
       return negInstances
 
+   def getALTrainingInstances(self,nDf,tests,kind,totalNeeded):
+      
+      epsilon = 0
+      if kind == 'rgb':
+        epsilon = 35
+      elif kind == 'shape':
+        epsilon = 1200
+      else :
+        epsilon = 1000
+      df = read_table(self.annotationFile, sep=',',  header=None)
+      cDz = df.values
+      instances = nDf.to_dict()
+      data = [list(inst) for column in df.values for inst in instances[column[0]][0].getFeatures(kind)]
+      data = np.array(data)
+      indices = [i for (i,column) in enumerate(df.values) for ii in range(len(instances[column[0]][0].getFeatures(kind)))]
+      trainInds = [i for (i,column) in enumerate(df.values) if column[0] not in tests] 
+#      db = DBSCAN(eps=epsilon, min_samples=totalNeeded).fit(data)
+      cls = 10 
+      if len(indices) <= cls:
+        cls = 3
+      db = AgglomerativeClustering(n_clusters=cls).fit(data)
+      labels = db.labels_
+#      print set(labels)
+      n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+      if n_clusters_ == 0:
+           indicesTobeTrained = []
+           while(len(indicesTobeTrained) < totalNeeded):
+               ind = random.randint(0,len(indices))
+               if indices[ind] in trainInds:
+                 indicesTobeTrained.append(indices[ind])
+           return np.sort(indicesTobeTrained)     
+      indicesToPick = totalNeeded/n_clusters_
+      indicesTobeTrained = []
+      for ind in set(labels):
+         if ind != -1:
+            indexes = [x for x in range(len(labels)) if labels[x]==ind]
+            i = 0
+            while i < indicesToPick:
+               indd = indexes[random.randint(0,len(indexes) -1 )]
+               indds = indices[indd]
+               if indds in trainInds:
+                     indicesTobeTrained.append(indds)
+                     i += 1
+      while(len(indicesTobeTrained) < totalNeeded):
+          ind = random.randint(0,len(labels) -1)
+          if labels[ind] != -1 and indices[ind] in trainInds:
+             indicesTobeTrained.append(indices[ind]) 
+      print np.sort(indicesTobeTrained) 
+      return np.sort(indicesTobeTrained)
+
    def getDataSet(self,cDf,nDf,tests,tIndices):
       instances = nDf.to_dict()
       df = read_table(self.annotationFile, sep=',',  header=None)  
@@ -306,7 +359,11 @@ def  findScoresManual(ttY,predY):
      prec = float(tP / (tP + fP))
    if (tP + fN) != 0 :
      rec = float(tP / (tP + fN))
-
+   else:
+     rec = float('nan')
+     f1 = prec
+     return (prec,rec,f1)
+   
    f1 = 0.0
    if(prec + rec) != 0:
      f1 = float(2 * prec * rec / (prec + rec))
@@ -410,9 +467,21 @@ def callML(resultDir,insts,tkns,tests):
      kindWriter[kind] = csv.DictWriter(kindConfFile[kind],fieldnames=kkeys)
      kindWriter[kind].writeheader()
   gloabAccuracy = {}
+  globPrecision = {}
+  globRecall = {}
+  globF1Score = {}
+  totalCProbabilities = {}
+  totalSProbabilities = {}
+  totalOProbabilities = {}
   for kind in kinds:
      gloabAccuracy[kind] = np.array([])
+     globPrecision[kind] = np.array([])
+     globRecall[kind] = np.array([])
+     globF1Score[kind] = np.array([])
+  testTokens = []
   for (token,kind,X,Y,tX,tY) in findTrainTestFeatures(insts,tkns,tests):
+   if token not in testTokens:
+      testTokens.append(token)
    print "Token : " + token + ", Kind : " + kind
    polynomial_features = PolynomialFeatures(degree=2,include_bias=False)
    sgdK = linear_model.LogisticRegression(C=10**5,random_state=0)
@@ -458,6 +527,21 @@ def callML(resultDir,insts,tkns,tests):
 #      confDict[tt] = str(tConf) + " [" + ",".join(str(tProbs)) + "] "
       confDict[tt] = str(tConf)
       tcatProb.append(tConf)
+      if kind == 'rgb':
+           if ii in totalCProbabilities.keys():
+              totalCProbabilities[ii].append(tConf)
+           else:
+              totalCProbabilities[ii] = [tConf]
+      elif kind == 'shape':
+           if ii in totalSProbabilities.keys():
+              totalSProbabilities[ii].append(tConf)
+           else:
+              totalSProbabilities[ii] = [tConf]
+      elif kind == 'object':
+           if ii in totalOProbabilities.keys():
+              totalOProbabilities[ii].append(tConf)
+           else:
+              totalOProbabilities[ii] = [tConf]
 #      print "\n"
    confWriter.writerow(confDict)
 #   predY = pipeline2_2.predict(ttX)
@@ -466,10 +550,19 @@ def callML(resultDir,insts,tkns,tests):
 #   acc = pipeline2_2.score(ttX, ttY)   
    acc = float(sum(tAcc)/len(tAcc))
    gloabAccuracy[kind] = np.append(gloabAccuracy[kind],acc)
+   tPrec = [val for val in tPrec if not math.isnan(val)]
    prec = float(sum(tPrec)/len(tPrec))
-   recall = float(sum(tRec)/len(tRec))
-   f1score = float(2.0 * prec * recall / (prec + recall))
-   print "Total ", acc,prec,recall,f1score
+   tRec = [val for val in tRec if not math.isnan(val)]
+   if len(tRec) == 0:
+     recall = x=float('nan')
+     f1score = prec
+   else:
+     recall = float(sum(tRec)/len(tRec))
+     f1score = float(2.0 * prec * recall / (prec + recall))
+   globPrecision[kind] = np.append(globPrecision[kind],prec)
+   globRecall[kind] = np.append(globRecall[kind],recall)
+   globF1Score[kind] = np.append(globF1Score[kind],f1score)
+#   print "Total ", acc,prec,recall,f1score
    probl = pipeline2_2.predict_proba(ttX)
    dict2 = {'Token' : token,'Type' : kind,'Accuracy' : round(acc,pNum) ,'Precision' : round(prec,pNum) ,'Recall' : round(recall,pNum),'F1-Score' : round(f1score,pNum)}
    dict2.update(dict1)
@@ -484,13 +577,34 @@ def callML(resultDir,insts,tkns,tests):
   csvFile.close()
   confFile.close()
   avAcc = {}
+  avPrec = {}
+  avRecall = {}
+  avF1 = {}
   for kind in kinds:
     avAcc[kind] = float(np.average(gloabAccuracy[kind]))
+    globR =  [val for val in globRecall[kind] if not math.isnan(val)]
+    avRecall[kind] = float(np.average(globR))
+    avPrec[kind] = float(np.average(globPrecision[kind]))
+    avF1[kind] = float(np.average(globF1Score[kind]))
   for kind in kinds:
     kindConfFile[kind].close()
-  print " Token Accuracies :: ",
-  print gloabAccuracy
-  return avAcc
+  correctPred = {}
+  for kind in kinds:
+   probs = totalCProbabilities
+   cPred = 0
+   if kind == 'rgb':
+    probs = totalCProbabilities
+   elif kind == 'shape':
+    probs = totalSProbabilities
+   elif kind == 'object':
+    probs = totalOProbabilities
+   for ii in probs:
+       index_max = np.argmax(probs[ii])
+       tkn = testTokens[index_max]
+       pred = getGroundTruth(tests[ii],tkn,kind) 
+       cPred += pred
+   correctPred[kind] = cPred  
+  return avAcc,avPrec,avRecall,avF1,correctPred
 
 def generateNegativeTrainingFiles(nDf,tkns,tests):
    instances = nDf.to_dict()
@@ -534,28 +648,79 @@ if __name__== "__main__":
   cGTFile = execPath + "color_groundtruth_annotation.conf"
   sGTFile = execPath + "shape_groundtruth_annotation.conf"
   oGTFile = execPath + "object_groundtruth_annotation.conf"
-  resultDir = "Results/4"
+  resultDir = "Results/5"
   os.system("rm -rf " + resultDir)
   os.system("mkdir -p " + resultDir)
 
   ds = DataSet(dsPath,anFile)
   (cDf,nDf) = ds.findCategoryInstances()
   tests = ds.splitTestInstances(cDf)
+  print "MANUAL START :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   ctotalAcc = {}
+  ctotalPrec = {}
+  ctotalRecall = {}
+  ctotalF1 = {}
   for kind in kinds:
     ctotalAcc[kind] = np.array([])
+    ctotalPrec[kind] = np.array([])
+    ctotalRecall[kind] = np.array([])
+    ctotalF1[kind] = np.array([])
 
-  for inds in np.arange(20,100,20):
+  for inds in np.arange(20,90,20):
     print "COUNT ",inds
-    resultDir1 = resultDir + "/" + str(inds)
+    resultDir1 = resultDir + "/ML/" + str(inds)
+    os.system("mkdir -p " + resultDir1)
     tIndices = range(inds)
     (insts,tokens,tests) = ds.getDataSet(cDf,nDf,tests,tIndices)
     generateNegativeTrainingFiles(insts,tokens,tests)
     getAllGroundTruths(insts,cGTFile,sGTFile,oGTFile)  
     ds.getAllFeatures(insts)
-    acc = callML(resultDir1,insts,tokens,tests)
+    (acc,avPrec,avRecall,avF1,cPred) = callML(resultDir1,insts,tokens,tests)
     for kind in kinds:
-       ctotalAcc[kind] = np.append(ctotalAcc[kind],acc[kind])
-    print ctotalAcc
-    print "\n"
-  print "END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ctotalAcc[kind] = np.append(ctotalAcc[kind],acc[kind])
+        ctotalPrec[kind] = np.append(ctotalPrec[kind],avPrec[kind])
+        ctotalRecall[kind] = np.append(ctotalRecall[kind],avRecall[kind])
+        ctotalF1[kind] = np.append(ctotalF1[kind],avF1[kind])
+    print "Accuracy ",ctotalAcc
+    print "Precision ", ctotalPrec
+    print "Recall ", ctotalRecall
+    print "F1 Score ",ctotalF1
+    print "Correct Predictions ", cPred
+    print "MANUAL ENDED\n"
+  print "MANUAL END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+  print "AL START :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+  kinds1 = kinds
+  for kk in  kinds1:
+   kinds = [kk]
+   ctotalAcc = {}
+   ctotalPrec = {}
+   ctotalRecall = {}
+   ctotalF1 = {}
+   for kind in kinds:
+    ctotalAcc[kind] = np.array([])
+    ctotalPrec[kind] = np.array([])
+    ctotalRecall[kind] = np.array([])
+    ctotalF1[kind] = np.array([])
+   for inds in np.arange(20,90,20):
+    print "COUNT :: ",inds
+    resultDir1 = resultDir + "/AL/" +kind +"/" + str(inds)
+    os.system("mkdir -p " + resultDir1)
+    tIndices = ds.getALTrainingInstances(nDf,tests,kinds[0],inds)
+    (insts,tokens,tests) = ds.getDataSet(cDf,nDf,tests,tIndices)
+    generateNegativeTrainingFiles(insts,tokens,tests)
+    getAllGroundTruths(insts,cGTFile,sGTFile,oGTFile)
+    ds.getAllFeatures(insts)
+    (acc,avPrec,avRecall,avF1,cPred) = callML(resultDir1,insts,tokens,tests)
+    for kind in kinds:
+        ctotalAcc[kind] = np.append(ctotalAcc[kind],acc[kind])
+        ctotalPrec[kind] = np.append(ctotalPrec[kind],avPrec[kind])
+        ctotalRecall[kind] = np.append(ctotalRecall[kind],avRecall[kind])
+        ctotalF1[kind] = np.append(ctotalF1[kind],avF1[kind])
+    print "Accuracy ",ctotalAcc
+    print "Precision ", ctotalPrec
+    print "Recall ", ctotalRecall
+    print "F1 Score ",ctotalF1
+    print "Correct Predictions ", cPred
+    print "AL ENDED\n"
+  print "AL END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
