@@ -23,12 +23,15 @@ from sklearn.cluster import DBSCAN
 from sklearn.cluster import AgglomerativeClustering
 
 kinds = np.array(['rgb','shape','object'])
-#execPath = '/Users/nishapillai/Documents/GitHub/alExec/'
 execPath = './'
-#dPath = '/Users/nishapillai/Documents/GitHub/alExec/'
 dPath = "../"
-dsPath = dPath + "nDz/"
+dsPath = dPath + "nTz/"
 fAnnotation = execPath + "groundtruth_annotation.conf"
+
+sections = 5
+quartiles = [2]
+
+dgAbove = 40
 
 cGT = {}
 sGT = {}
@@ -163,11 +166,11 @@ class Token:
 
    def getTrainFiles(self,insts,kind):
       instances = insts.to_dict()
-#      pS = Counter(self.posInstances)
-#      for (k,v) in pS.items():
-#        if v <= 10:
-#         index = np.argwhere(self.posInstances==k)
-#         self.posInstances = np.delete(self.posInstances, index)
+      pS = Counter(self.posInstances)
+      for (k,v) in pS.items():
+        if v <= 10:
+         index = np.argwhere(self.posInstances==k)
+         self.posInstances = np.delete(self.posInstances, index)
       features = np.array([])
       negFeatures = np.array([])
       y = np.array([])
@@ -322,17 +325,38 @@ class DataSet:
         instances[ds][0].addTokens(dsTokens)
         if ds not in tests:
          iName = instances[ds][0].getName()
-#         negatives = instances[iName][0].getNegatives()
-         negatives = negExamples[ds].split(",")
-         negatives = [xx for xx in negatives if xx not in tests]
          for annotation in dsTokens:
              if annotation not in tokenDf.keys():
                  tokenDf[annotation] = Token(annotation)
              tokenDf[annotation].extendPositives(ds) 
-             tokenDf[annotation].extendNegatives(negatives)
       tks = pd.DataFrame(tokenDf,index=[0])
       sent = "Tokens :: "+ " ".join(tokenDf.keys())
       fileAppend(fName,sent)
+      for tk in tokenDf.keys():
+         poss = list(set(tokenDf[tk].getPositives()))
+         negs = []
+         for ds in poss:
+             if isinstance(negExamples[ds], str):
+                  negatives1 = negExamples[ds].split(",")
+		  negatives = []
+                  for instNeg in negatives1:
+                       s1 = instNeg.split("-")
+                       if int(float(s1[1])) >= dgAbove:
+                             negatives.append(s1[0])
+                  negatives = [xx for xx in negatives if xx not in tests]
+                  negatives = [xx for xx in negatives if xx not in poss]
+                  negs.extend(negatives)
+         negsPart = []
+         for part in quartiles:
+            noElements  = len(negs)/ sections
+            sNo = (part - 1)* noElements          
+#	    eNo = part  * noElements
+#	    if part == sections:
+	    eNo =  len(negs)
+	    kk = negs[sNo:eNo]
+            negsPart.extend(kk)
+         negsPart = negs
+         tokenDf[tk].extendNegatives(negsPart)
       return (nDf,tks,tests)
 
    def getAllFeatures(self,nDf):
@@ -402,8 +426,7 @@ def  findScoresManual(ttY,predY):
 
 def findTrainTestFeatures(insts,tkns,tests):
   tokenDict = tkns.to_dict()
-  for token in ['banana']:
-#  for token in np.sort(tokenDict.keys()):
+  for token in np.sort(tokenDict.keys()):
      objTkn = tokenDict[token][0]
      for kind in kinds:
 #     for kind in ['rgb']: 
@@ -737,16 +760,13 @@ if __name__== "__main__":
 #  print "START :: " + str(pd.to_datetime('now'))
   print "START :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
   anFile =  execPath + "groundtruth_annotation.conf"
-#  anFile =  execPath + "3k_Thresh_fulldataset.conf"
   anFile =  execPath + "6k_72instances_mechanicalturk_description.conf"
   cGTFile = execPath + "color_groundtruth_annotation.conf"
   sGTFile = execPath + "shape_groundtruth_annotation.conf"
   oGTFile = execPath + "object_groundtruth_annotation.conf"
-  resultDir = "LearnLanguage/ML/Negatives-5Q-Banana/"
-  negFile = execPath + "/Doc2Vec/5-86-107-Negs.txt"
-#  resultDir = args[1]
+  resultDir = "LearnLanguage/ML/Test/"
+  negFile = execPath + "/Doc2Vec/NegInstancesWithDegrees.txt"
   fResName = ""
-#  kinds = np.array(['shape'])
   print resultDir
   os.system("rm -rf " + resultDir)
   os.system("mkdir -p " + resultDir)
@@ -793,48 +813,3 @@ if __name__== "__main__":
   fileAppend(fResName,sent)
   print "MANUAL ENDED\n"
   print "MANUAL END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-  exit(0)
-  print "Test Instances :: ", tests
-  print "MLP START :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-  fResName = ""
-  kinds = np.array(['object'])
-  kinds1 = kinds
-  for kk in  kinds1:
-   kinds = [kk]
-   ctotalAcc = {}
-   ctotalPrec = {}
-   ctotalRecall = {}
-   ctotalF1 = {}
-   for kind in kinds:
-    ctotalAcc[kind] = np.array([])
-    ctotalPrec[kind] = np.array([])
-    ctotalRecall[kind] = np.array([])
-    ctotalF1[kind] = np.array([])
-   for inds in np.arange(6500,7000,1000):
-    print "COUNT :: ",inds
-    resultDir1 = resultDir + "/MLP/" + str(inds)
-    os.system("mkdir -p " + resultDir1)
-    tIndices = range(inds)
-    fResName = resultDir1 + "/results.txt"
-    sent = "Test Instances :: " + " ".join(tests)
-    fileAppend(fResName,sent) 
-    (insts,tokens,tests) = ds.getDataSet(cDf,nDf,tests,tIndices,fResName)
-    findPositiveNegativeInstances(insts,tokens,tests,resultDir1)
-    generateNegativeTrainingFiles(insts,tokens,tests)
-    getAllGroundTruths(insts,cGTFile,sGTFile,oGTFile)
-    ds.getAllFeatures(insts)
-    (acc,avPrec,avRecall,avF1,cPred) = callML(resultDir1,insts,tokens,tests,1,fResName)
-    for kind in kinds:
-        ctotalAcc[kind] = np.append(ctotalAcc[kind],acc[kind])
-        ctotalPrec[kind] = np.append(ctotalPrec[kind],avPrec[kind])
-        ctotalRecall[kind] = np.append(ctotalRecall[kind],avRecall[kind])
-        ctotalF1[kind] = np.append(ctotalF1[kind],avF1[kind])
-   print "Accuracy ",ctotalAcc
-   print "Precision ", ctotalPrec
-   print "Recall ", ctotalRecall
-   print "F1 Score ",ctotalF1
-   print "Correct Predictions ", cPred
-   sent = "Accuracy " + str(ctotalAcc) + ", Precision " + str(ctotalPrec) + ", Recall " + str(ctotalRecall) + ", F1 Score " + str(ctotalF1) + ", Correct Predictions " + str(cPred)
-   fileAppend(fResName,sent) 
-   print "MLP ENDED\n"
-  print "MLP END :: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
